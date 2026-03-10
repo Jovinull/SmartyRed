@@ -1,0 +1,22 @@
+# Dependências e arquivos gerados
+venv/
+__pycache__/
+*.pyc
+
+# Modelos treinados (podem ser grandes)
+models/
+
+# Logs do TensorBoard
+logs/
+
+# Save states do emulador
+*.state
+
+# Arquivos de save do jogo
+*.ram
+*.rtc
+
+# ROMs (não devem ser commitadas por questões legais)
+*.gb
+*.gbc
+*.gba

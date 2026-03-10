@@ -1,10 +1,15 @@
-certifi==2026.2.25
-charset-normalizer==3.4.5
-idna==3.11
+# ==========================================
+# Pokémon Red AI — Reinforcement Learning
+# ==========================================
+# Core
+pyboy==2.7.0
 numpy==2.4.3
 pillow==12.1.1
-pyboy==2.7.0
+
+# RL Framework
+stable-baselines3[extra]
+gymnasium
+
+# PyBoy dependencies (instaladas automaticamente)
 PySDL2==0.9.17
 pysdl2-dll==2.32.0
-requests==2.32.5
-urllib3==2.6.3
