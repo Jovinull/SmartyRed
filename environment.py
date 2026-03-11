@@ -322,6 +322,14 @@ class PokemonRedEnv(gym.Env):
         """Conta o número de badges."""
         return self._bit_count(self._read_m(mem.BADGES))
 
+    def _read_triple(self, addr):
+        """Lê 3 bytes consecutivos (usado para XP)."""
+        return 256 * 256 * self._read_m(addr) + 256 * self._read_m(addr + 1) + self._read_m(addr + 2)
+
+    def _get_party_xp(self):
+        """Soma o XP atual de toda a party."""
+        return sum(self._read_triple(a) for a in mem.PARTY_XP)
+
     def _bit_count(self, bits):
         """Conta bits ativos."""
         return bin(bits).count("1")
@@ -402,16 +410,17 @@ class PokemonRedEnv(gym.Env):
     def _get_game_state_reward(self):
         """
         Sistema de recompensas combinando baselines + V2.
-        Baselines inclui level/op_lvl/dead que ensinam a IA a combater.
-        V2 inclui event flags e stuck penalty que ensinam progressão.
+        Baselines: level, op_lvl, dead e party_xp (combate).
+        V2: event (* 4), stuck penalty, global map (progressão).
         """
         return {
-            "event": config.REWARD_SCALE * self._update_max_event_rew(),
+            "event": config.REWARD_SCALE * self._update_max_event_rew() * 4,
+            "party_xp": config.REWARD_SCALE * self._get_party_xp() * 0.001,
             "level": config.REWARD_SCALE * self._get_levels_reward(),
             "heal": config.REWARD_SCALE * self.total_healing_rew,
             "op_lvl": config.REWARD_SCALE * self._update_max_op_level(),
             "dead": config.REWARD_SCALE * -0.1 * self.died_count,
-            "badge": config.REWARD_SCALE * self._get_badges() * 5,
+            "badge": config.REWARD_SCALE * self._get_badges() * 10,
             "explore": config.REWARD_SCALE * config.EXPLORE_WEIGHT * len(self.seen_coords) * 0.1,
             "stuck": config.REWARD_SCALE * self._get_stuck_penalty() * -0.05,
         }
