@@ -1,39 +1,53 @@
 # Pokémon Red AI — Reinforcement Learning
 
-Agente autônomo que aprende a jogar Pokémon Red usando **Aprendizado por Reforço (PPO)** via Stable-Baselines3 + PyBoy.
+Agente autônomo que **aprende sozinho** a jogar Pokémon Red usando Aprendizado por Reforço (PPO).
 
-## Requisitos
+Adaptado do [PokemonRedExperiments](https://github.com/pwhiddy/PokemonRedExperiments) V2 por Peter Whidden.
 
-- Python 3.10+
-- ROM do Pokémon Red (.gb)
+## Arquitetura
+
+O agente "enxerga" o jogo através de:
+- **3 frames empilhados** da tela (memória visual)
+- **Fração de HP** de toda a party
+- **Mapa de exploração** local (onde já andou)
+- **Badges** conquistadas (vetor binário)
+- **~1700 event flags** do jogo (progresso na história!)
+- **Últimas 3 ações** tomadas
+
+E é recompensado por:
+- ✅ Ativar event flags (falar com NPCs, pegar itens, derrotar treinadores)
+- ✅ Curar no Pokémon Center
+- ✅ Conquistar badges
+- ✅ Explorar tiles novos
+- ❌ Ficar andando em círculos (penalidade)
 
 ## Instalação
 
 ```bash
 python -m venv venv
-.\venv\Scripts\activate      # Windows
+.\venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 ```
 
 ## Como Usar
 
-### 1. Criar Save State (Recomendado)
-Jogue manualmente até escolher seu Pokémon inicial e feche a janela:
+### 1. (Opcional) Criar Save State personalizado
 ```bash
 python play.py --create-save
 ```
 
 ### 2. Treinar o Agente
 ```bash
-python train.py                       # Treina do zero (1M steps)
-python train.py --timesteps 5000000   # Treinar por mais tempo
-python train.py --resume              # Continuar treino anterior
+python train.py                         # Treina (continua automaticamente se já tiver checkpoint)
+python train.py --fresh                 # Força treino do zero
+python train.py --timesteps 20000000    # Treinar por mais tempo
 ```
+
+> **Dica**: O treino **continua automaticamente** do último checkpoint ao rodar `python train.py` de novo. Não precisa do flag `--resume`!
 
 ### 3. Assistir o Agente Jogar
 ```bash
-python play.py                        # Usa o melhor modelo disponível
-python play.py --model models/pokemon_ppo_final.zip
+python play.py
 ```
 
 ### 4. Monitorar com TensorBoard
@@ -41,22 +55,23 @@ python play.py --model models/pokemon_ppo_final.zip
 tensorboard --logdir logs/
 ```
 
-## Arquitetura
+## Estrutura do Projeto
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `memory_map.py` | Endereços de memória RAM do Pokémon Red |
-| `rewards.py` | Sistema de recompensas (exploração, badges, XP, HP) |
-| `environment.py` | Gymnasium Environment envolvendo o PyBoy |
+| `environment.py` | Gymnasium Env com observação multimodal (Dict) |
+| `memory_map.py` | Endereços RAM do Pokémon Red (party, badges, events) |
+| `global_map.py` | Conversão de coordenadas locais → globais |
 | `config.py` | Hiperparâmetros centralizados |
-| `train.py` | Script de treinamento com PPO |
-| `play.py` | Assistir o agente treinado jogar |
+| `train.py` | Treinamento PPO com checkpoint automático |
+| `play.py` | Assistir agente / Criar save state |
+| `events.json` | Nomes das event flags do jogo |
+| `map_data.json` | Dados de posição de cada mapa |
+| `init.state` | Save state inicial do emulador |
 
-## Ajustes
+## Hardware Recomendado
 
-Todos os hiperparâmetros estão em `config.py`. Os mais importantes:
+- **Mínimo**: i5 + 16GB RAM (treino single-CPU)
+- **Ideal**: GPU NVIDIA + 64 CPUs (como no projeto referência)
 
-- `TOTAL_TIMESTEPS`: Quanto tempo treinar (mais = melhor, mas mais lento)
-- `REWARD_NEW_TILE`: Recompensa por explorar tiles novos
-- `REWARD_BADGE`: Recompensa por ganhar badges
-- `FRAMES_PER_ACTION`: Frames por ação (afeta velocidade de decisão)
+Com um i5 13ª gen, espere resultados visíveis após ~2-5M steps (algumas horas).

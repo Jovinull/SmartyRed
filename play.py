@@ -1,25 +1,24 @@
 """
-play.py — Assistir o agente treinado jogar com janela gráfica.
+play.py — Assistir o agente jogar ou criar save state.
 
-Modos de uso:
-    python play.py                    → Assiste o melhor modelo treinado jogar
-    python play.py --model models/pokemon_ppo_final.zip  → Carrega modelo específico
-    python play.py --create-save      → Jogue manualmente para criar um save state
+Uso:
+    python play.py                        → Assiste o melhor modelo jogar
+    python play.py --model models/x.zip   → Carrega modelo específico
+    python play.py --create-save          → Joga manualmente para criar save state
 """
 import argparse
 import os
+import glob
 import time
 
 from stable_baselines3 import PPO
-from pyboy.utils import WindowEvent
 
 import config
-from environment import PokemonRedEnv, ACTION_NAMES
-import memory_map as mem
+from environment import PokemonRedEnv
 
 
 def find_best_model() -> str | None:
-    """Encontra o modelo mais recente/melhor na pasta de modelos."""
+    """Encontra o modelo mais recente."""
     final = os.path.join(config.MODEL_DIR, "pokemon_ppo_final.zip")
     if os.path.exists(final):
         return final
@@ -27,30 +26,25 @@ def find_best_model() -> str | None:
     if not os.path.exists(config.MODEL_DIR):
         return None
 
-    models = [
-        f for f in os.listdir(config.MODEL_DIR)
-        if f.startswith("pokemon_ppo_") and f.endswith(".zip")
-    ]
-    if not models:
+    zips = glob.glob(os.path.join(config.MODEL_DIR, "pokemon_ppo_*.zip"))
+    if not zips:
         return None
-
-    models.sort(key=lambda x: int(x.replace("pokemon_ppo_", "").replace("_steps.zip", "")))
-    return os.path.join(config.MODEL_DIR, models[-1])
+    zips.sort(key=os.path.getmtime)
+    return zips[-1]
 
 
 def create_save_state():
-    """
-    Permite jogar manualmente para criar o save state inicial.
-    O usuário deve jogar até escolher seu Pokémon inicial e salvar.
-    """
+    """Jogue manualmente para criar o save state inicial."""
+    from pyboy import PyBoy
+    import memory_map as mem
+
     print("=" * 60)
     print("   MODO: CRIAR SAVE STATE")
     print("=" * 60)
-    print("  Jogue normalmente até ter seu primeiro Pokémon.")
-    print("  Quando estiver pronto, feche a janela do jogo.")
+    print("  Jogue até ter seu primeiro Pokémon (escolha o starter).")
+    print("  Quando estiver pronto, FECHE A JANELA do jogo.")
     print("  O estado será salvo automaticamente.\n")
 
-    from pyboy import PyBoy
     pyboy = PyBoy(config.ROM_PATH, window="SDL2")
     pyboy.set_emulation_speed(1)
 
@@ -60,36 +54,33 @@ def create_save_state():
     except KeyboardInterrupt:
         pass
 
-    # Salva o estado
-    with open(config.SAVE_STATE_PATH, "wb") as f:
+    # Salva
+    with open(config.INIT_STATE_PATH, "wb") as f:
         pyboy.save_state(f)
-    print(f"\n[OK] Save state criado: {config.SAVE_STATE_PATH}")
 
-    # Mostra info do estado salvo
+    # Info
     m = pyboy.memory
-    party_count = m[mem.PARTY_COUNT]
-    level = m[mem.PARTY1_LEVEL]
+    party = m[mem.PARTY_COUNT]
+    level = m[mem.PARTY_LEVELS[0]] if party > 0 else 0
     map_id = m[mem.MAP_ID]
-    map_name = mem.MAP_NAMES.get(map_id, f"Unknown({map_id})")
-    print(f"  Pokémon na party: {party_count}")
+    print(f"\n[OK] Save state salvo: {config.INIT_STATE_PATH}")
+    print(f"  Pokémon na party: {party}")
     print(f"  Level do primeiro: {level}")
-    print(f"  Mapa: {map_name}")
+    print(f"  Map ID: {map_id}")
 
     pyboy.stop()
 
 
 def watch_agent(model_path: str):
-    """Abre a janela do jogo e assiste o agente treinado jogar."""
+    """Assiste o agente treinado jogar via SDL2."""
     print("=" * 60)
     print("   POKÉMON RED — ASSISTINDO O AGENTE JOGAR")
     print("=" * 60)
     print(f"  Modelo: {model_path}\n")
 
-    # Cria ambiente COM janela gráfica
     env = PokemonRedEnv(render_mode="human")
-    env.pyboy.set_emulation_speed(1)  # Velocidade normal para visualização
+    env.pyboy.set_emulation_speed(1)
 
-    # Carrega o modelo treinado
     model = PPO.load(model_path, env=env)
 
     obs, _ = env.reset()
@@ -100,32 +91,29 @@ def watch_agent(model_path: str):
 
     try:
         while True:
-            # O agente escolhe uma ação
-            action, _ = model.predict(obs, deterministic=True)
+            action, _ = model.predict(obs, deterministic=False)
             obs, reward, terminated, truncated, info = env.step(int(action))
-
             total_reward += reward
             step_count += 1
 
-            # Log periódico
-            if step_count % 50 == 0:
+            if step_count % 100 == 0:
                 print(
-                    f"  Step {step_count:>5} | "
-                    f"Reward: {total_reward:>8.2f} | "
-                    f"Tiles: {info.get('tiles_explored', 0):>4} | "
-                    f"Mapas: {info.get('maps_explored', 0):>2} | "
+                    f"  Step {step_count:>6} | "
+                    f"Reward: {total_reward:>8.1f} | "
+                    f"Tiles: {info.get('tiles_explored', 0):>5} | "
                     f"Badges: {info.get('badges', 0)} | "
-                    f"Mapa: {info.get('map_name', '?')}"
+                    f"Deaths: {info.get('deaths', 0)} | "
+                    f"MapProg: {info.get('max_map_progress', 0)}"
                 )
 
             if terminated or truncated:
-                print(f"\n[EP FIM] Reward Total: {total_reward:.2f} | Steps: {step_count}")
+                print(f"\n[EP FIM] Reward: {total_reward:.1f} | Steps: {step_count}")
                 obs, _ = env.reset()
                 total_reward = 0
                 step_count = 0
 
     except KeyboardInterrupt:
-        print("\n[PLAY] Interrompido pelo usuário.")
+        print("\n[PLAY] Interrompido.")
     except SystemExit:
         pass
     finally:
@@ -134,20 +122,18 @@ def watch_agent(model_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Assistir o Agente Pokémon jogar")
-    parser.add_argument("--model", type=str, default=None, help="Caminho do modelo .zip")
-    parser.add_argument("--create-save", action="store_true", help="Jogar manualmente para criar save state")
+    parser.add_argument("--model", type=str, default=None)
+    parser.add_argument("--create-save", action="store_true")
     args = parser.parse_args()
 
     if args.create_save:
         create_save_state()
         return
 
-    # Encontra o modelo
     model_path = args.model or find_best_model()
-    if model_path is None or not os.path.exists(model_path):
+    if not model_path or not os.path.exists(model_path):
         print("[ERRO] Nenhum modelo treinado encontrado!")
-        print("       Execute 'python train.py' primeiro para treinar o agente.")
-        print("       Ou use --model para especificar o caminho de um modelo .zip")
+        print("       Execute 'python train.py' primeiro.")
         return
 
     watch_agent(model_path)

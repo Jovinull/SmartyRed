@@ -1,7 +1,8 @@
 """
-config.py — Hiperparâmetros centralizados do projeto.
+config.py — Hiperparâmetros centralizados.
 
-Altere os valores aqui para ajustar o treinamento sem mexer no código.
+Valores adaptados do PokemonRedExperiments V2 para execução single-CPU.
+O projeto original usa 64 CPUs. Para i5 13ª gen, usamos 1 CPU com episódios mais longos.
 """
 import os
 
@@ -9,57 +10,70 @@ import os
 # CAMINHOS
 # ===========================
 ROM_PATH = "Pokemon_FireRed.gb"
-SAVE_STATE_PATH = "checkpoint.state"        # Save state do emulador para reset rápido
-MODEL_DIR = "models"                        # Pasta onde os modelos treinados são salvos
-LOG_DIR = "logs"                            # Pasta dos logs do TensorBoard
+INIT_STATE_PATH = "init.state"            # Save state inicial (início do jogo)
+MODEL_DIR = "models"
+LOG_DIR = "logs"
+SESSION_DIR = "session"
 
 # ===========================
 # EMULADOR
 # ===========================
-FRAMES_PER_ACTION = 24      # Quantos frames avançar por ação (24 ≈ 1 tile de movimento)
-MAX_STEPS_PER_EPISODE = 2048 # Máximo de ações por episódio antes de resetar
+ACTION_FREQ = 24            # Frames por ação (padrão do projeto referência)
+# No projeto original: ep_length = 2048 * 80 = 163840 com 64 CPUs
+# Para 1 CPU: usamos episódios mais curtos para ter feedback mais rápido
+MAX_STEPS_PER_EPISODE = 2048 * 40  # ~81920 steps por episódio
 
 # ===========================
 # HIPERPARÂMETROS DO PPO
+# Adaptados do baseline_fast_v2.py
 # ===========================
-LEARNING_RATE = 2.5e-4      # Taxa de aprendizado
+# O ref usa: n_steps = ep_length // 64, batch=512, epochs=1, gamma=0.997, ent=0.01
+NUM_ENVS = 1                # Número de ambientes paralelos (1 para i5)
 N_STEPS = 2048              # Steps coletados antes de cada atualização
-BATCH_SIZE = 64             # Tamanho do mini-batch
-N_EPOCHS = 4                # Épocas por atualização
-GAMMA = 0.998               # Fator de desconto (alto = valoriza recompensas futuras)
-GAE_LAMBDA = 0.95           # Generalized Advantage Estimation
-CLIP_RANGE = 0.2            # Clip do PPO
-ENT_COEF = 0.01             # Coeficiente de entropia (incentiva exploração)
-TOTAL_TIMESTEPS = 1_000_000 # Total de timesteps de treino (ajuste conforme desejado)
+BATCH_SIZE = 512            # Tamanho do mini-batch
+N_EPOCHS = 1                # 1 época por atualização (como o referência)
+GAMMA = 0.997               # Fator de desconto (referência usa 0.997)
+GAE_LAMBDA = 0.95
+CLIP_RANGE = 0.2
+ENT_COEF = 0.01             # Coeficiente de entropia
+LEARNING_RATE = 2.5e-4
+TOTAL_TIMESTEPS = 10_000_000  # Treina por 10M steps (ajuste conforme quiser)
 
-# Rede Neural do agente (MLP = Multi-Layer Perceptron)
-POLICY_KWARGS = dict(
-    net_arch=dict(
-        pi=[128, 64],       # Rede da política (decisão de ações)
-        vf=[128, 64],       # Rede do valor (estimativa de recompensa futura)
-    )
-)
+# Rede Neural — usa MultiInputPolicy (Dict observation)
+# O referência usa a rede padrão do SB3 para MultiInput
 
 # ===========================
-# RECOMPENSAS
+# RECOMPENSAS (Adaptadas do referência)
 # ===========================
-REWARD_NEW_TILE = 0.02       # Recompensa por visitar um tile novo
-REWARD_NEW_MAP = 2.0         # Recompensa por entrar em um mapa nunca visitado
-REWARD_BADGE = 50.0          # Recompensa por ganhar uma badge
-REWARD_LEVEL_UP = 5.0        # Recompensa por level up do pokémon
-REWARD_HP_LOSS_PENALTY = -0.5  # Penalidade por perda de HP (por % perdido)
-REWARD_STUCK_PENALTY = -0.1  # Penalidade por ficar travado (mesma posição por muito tempo)
-REWARD_BLACKOUT = -10.0      # Penalidade por blackout (todos os pokémon morrem)
+REWARD_SCALE = 0.5          # Escala global das recompensas
+EXPLORE_WEIGHT = 0.25       # Peso da exploração
 
-STUCK_THRESHOLD = 20         # Quantos steps parado antes de começar a penalizar
+# Pesos individuais (multiplicados por reward_scale internamente)
+EVENT_REWARD_MULT = 4.0     # Multiplicador para event flags
+HEAL_REWARD_MULT = 10.0     # Multiplicador para cura
+BADGE_REWARD_MULT = 10.0    # Multiplicador por badge
+EXPLORE_REWARD_MULT = 0.1   # Multiplicador por tile explorado
+STUCK_PENALTY_MULT = -0.05  # Penalidade por ficar preso (>600 visitas ao mesmo tile)
+STUCK_VISIT_THRESHOLD = 600 # Quantas visitas ao mesmo tile = considerado "preso"
+
+# ===========================
+# OBSERVAÇÃO
+# ===========================
+FRAME_STACKS = 3            # Quantos frames empilhar (memória visual)
+SCREEN_SIZE = (72, 80)      # Tamanho da tela reduzida
+COORDS_PAD = 12             # Raio do mapa de exploração local
+ENC_FREQS = 8               # Frequências para Fourier encoding dos levels
 
 # ===========================
 # LOGGING
 # ===========================
-SAVE_FREQUENCY = 50_000     # Salvar modelo a cada N timesteps
-LOG_FREQUENCY = 1           # Frequência de log no TensorBoard (1 = todo episódio)
-VERBOSE = 1                 # 0=silencioso, 1=infos, 2=debug
+SAVE_FREQUENCY = 50_000
+SAVE_VIDEO = False
+FAST_VIDEO = True
+PRINT_REWARDS = True
+VERBOSE = 1
 
-# Cria pastas se não existirem
+# Cria pastas
 os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(SESSION_DIR, exist_ok=True)

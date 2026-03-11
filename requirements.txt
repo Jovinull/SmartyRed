@@ -1,15 +1,20 @@
 # ==========================================
 # Pokémon Red AI — Reinforcement Learning
+# Adaptado do PokemonRedExperiments V2
 # ==========================================
-# Core
-pyboy==2.7.0
-numpy==2.4.3
-pillow==12.1.1
+
+# Emulador
+pyboy>=2.7.0
+pillow>=12.0.0
 
 # RL Framework
-stable-baselines3[extra]
-gymnasium
+stable-baselines3>=2.7.0
+gymnasium>=1.2.0
 
-# PyBoy dependencies (instaladas automaticamente)
-PySDL2==0.9.17
-pysdl2-dll==2.32.0
+# Machine Learning
+torch>=2.0.0
+numpy>=2.0.0
+
+# Logging
+tensorboard>=2.0.0
+tqdm>=4.60.0
