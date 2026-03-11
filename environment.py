@@ -401,15 +401,19 @@ class PokemonRedEnv(gym.Env):
 
     def _get_game_state_reward(self):
         """
-        Sistema de recompensas adaptado do PokemonRedExperiments V2.
-        Retorna dict com cada componente da reward.
+        Sistema de recompensas combinando baselines + V2.
+        Baselines inclui level/op_lvl/dead que ensinam a IA a combater.
+        V2 inclui event flags e stuck penalty que ensinam progressão.
         """
         return {
-            "event": config.REWARD_SCALE * self._update_max_event_rew() * config.EVENT_REWARD_MULT,
-            "heal": config.REWARD_SCALE * self.total_healing_rew * config.HEAL_REWARD_MULT,
-            "badge": config.REWARD_SCALE * self._get_badges() * config.BADGE_REWARD_MULT,
-            "explore": config.REWARD_SCALE * config.EXPLORE_WEIGHT * len(self.seen_coords) * config.EXPLORE_REWARD_MULT,
-            "stuck": config.REWARD_SCALE * self._get_stuck_penalty() * config.STUCK_PENALTY_MULT,
+            "event": config.REWARD_SCALE * self._update_max_event_rew(),
+            "level": config.REWARD_SCALE * self._get_levels_reward(),
+            "heal": config.REWARD_SCALE * self.total_healing_rew,
+            "op_lvl": config.REWARD_SCALE * self._update_max_op_level(),
+            "dead": config.REWARD_SCALE * -0.1 * self.died_count,
+            "badge": config.REWARD_SCALE * self._get_badges() * 5,
+            "explore": config.REWARD_SCALE * config.EXPLORE_WEIGHT * len(self.seen_coords) * 0.1,
+            "stuck": config.REWARD_SCALE * self._get_stuck_penalty() * -0.05,
         }
 
     def _get_all_events_reward(self):
@@ -429,17 +433,44 @@ class PokemonRedEnv(gym.Env):
 
     def _update_heal_reward(self):
         """
-        Detecta cura vs morte.
-        - Se HP subiu e party_size não mudou → curou (reward positiva)
+        Detecta cura vs morte (igual ao baselines).
+        - Se HP subiu e party_size não mudou → curou (reward = heal_amount * 4)
         - Se HP era 0 e subiu → morreu e reviveu (conta como morte)
         """
         cur_health = self._read_hp_fraction()
         if cur_health > self.last_health and self._read_m(mem.PARTY_COUNT) == self.party_size:
             if self.last_health > 0:
                 heal_amount = cur_health - self.last_health
-                self.total_healing_rew += heal_amount * heal_amount  # Quadrado = recompensa maior para curas maiores
+                self.total_healing_rew += heal_amount * 4  # Multiplicador do baselines
             else:
                 self.died_count += 1
+
+    def _get_levels_reward(self):
+        """
+        Recompensa por level up (do baselines).
+        Escala linearmente até threshold 22, depois cresce 4x mais devagar.
+        Isso incentiva combate no início e evita over-grinding depois.
+        """
+        explore_thresh = 22
+        scale_factor = 4
+        level_sum = self._get_levels_sum()
+        if level_sum < explore_thresh:
+            scaled = level_sum
+        else:
+            scaled = (level_sum - explore_thresh) / scale_factor + explore_thresh
+        self.max_level_rew = max(self.max_level_rew, scaled)
+        return self.max_level_rew
+
+    def _update_max_op_level(self):
+        """
+        Recompensa por enfrentar oponentes mais fortes (do baselines).
+        Incentiva a IA a buscar batalhas difíceis.
+        """
+        opponent_level = max(
+            self._read_m(a) for a in mem.OPPONENT_LEVELS
+        ) - 5  # Subtrai level base
+        self.max_opponent_level = max(self.max_opponent_level, opponent_level)
+        return self.max_opponent_level * 0.2
 
     def _get_levels_sum(self):
         """Soma de levels de todos os pokémon (com ajuste para o level inicial)."""

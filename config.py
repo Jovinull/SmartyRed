@@ -9,7 +9,7 @@ import os
 # ===========================
 # CAMINHOS
 # ===========================
-ROM_PATH = "Pokemon_FireRed.gb"
+ROM_PATH = "PokemonRed.gb"
 INIT_STATE_PATH = "init.state"            # Save state inicial (início do jogo)
 MODEL_DIR = "models"
 LOG_DIR = "logs"
@@ -28,7 +28,7 @@ MAX_STEPS_PER_EPISODE = 2048 * 40  # ~81920 steps por episódio
 # Adaptados do baseline_fast_v2.py
 # ===========================
 # O ref usa: n_steps = ep_length // 64, batch=512, epochs=1, gamma=0.997, ent=0.01
-NUM_ENVS = 1                # Número de ambientes paralelos (1 para i5)
+NUM_ENVS = 8                # Processos paralelos (8 Game Boys simultâneos)
 N_STEPS = 2048              # Steps coletados antes de cada atualização
 BATCH_SIZE = 512            # Tamanho do mini-batch
 N_EPOCHS = 1                # 1 época por atualização (como o referência)
@@ -43,17 +43,10 @@ TOTAL_TIMESTEPS = 10_000_000  # Treina por 10M steps (ajuste conforme quiser)
 # O referência usa a rede padrão do SB3 para MultiInput
 
 # ===========================
-# RECOMPENSAS (Adaptadas do referência)
+# RECOMPENSAS (Hardcoded iguais ao baselines do PokemonRedExperiments)
 # ===========================
 REWARD_SCALE = 0.5          # Escala global das recompensas
 EXPLORE_WEIGHT = 0.25       # Peso da exploração
-
-# Pesos individuais (multiplicados por reward_scale internamente)
-EVENT_REWARD_MULT = 4.0     # Multiplicador para event flags
-HEAL_REWARD_MULT = 10.0     # Multiplicador para cura
-BADGE_REWARD_MULT = 10.0    # Multiplicador por badge
-EXPLORE_REWARD_MULT = 0.1   # Multiplicador por tile explorado
-STUCK_PENALTY_MULT = -0.05  # Penalidade por ficar preso (>600 visitas ao mesmo tile)
 STUCK_VISIT_THRESHOLD = 600 # Quantas visitas ao mesmo tile = considerado "preso"
 
 # ===========================
